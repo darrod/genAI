@@ -263,7 +263,8 @@ function isValidName(str) {
  * @param {string} message - The original message containing PII
  * @returns {Promise<string>} - The anonymized message with tokens replacing PII
  */
-async function anonymizeMessage(message) {
+async function anonymizeMessage(message, options = {}) {
+  const { lenientNames = false } = options;
   let anonymized = message;
 
   // Step 1: Anonymize emails
@@ -288,6 +289,25 @@ async function anonymizeMessage(message) {
     if (isValidName(match)) {
       const token = await generateToken(match, 'NAME');
       anonymized = anonymized.replace(match, token);
+    }
+  }
+
+  // Optional lenient mode for names: capture lowercase two-word sequences likely to be names
+  if (lenientNames) {
+    // Basic Spanish stopwords to avoid obvious non-names
+    const stopwords = new Set(['de','del','la','el','los','las','y','para','con','sin','sobre','desde','hasta','por','en','oferta','trabajo','email','correo','telefono','teléfono','cv','resume','resumen']);
+    const lowerSeqRegex = /\b([a-záéíóúñ]{2,})\s+([a-záéíóúñ]{2,})\b/g;
+    const seen = new Set();
+    let m;
+    while ((m = lowerSeqRegex.exec(message)) !== null) {
+      const candidate = `${m[1]} ${m[2]}`;
+      const w1 = m[1];
+      const w2 = m[2];
+      if (stopwords.has(w1) || stopwords.has(w2)) continue;
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      const token = await generateToken(candidate, 'NAME');
+      anonymized = anonymized.replace(new RegExp(candidate, 'g'), token);
     }
   }
 
@@ -505,8 +525,8 @@ app.post('/secureChatGPT', async (req, res) => {
       });
     }
 
-    // 2) Anonymize incoming prompt
-    const anonymizedPrompt = await anonymizeMessage(prompt);
+    // 2) Anonymize incoming prompt (lenient names enabled for lowercase cases)
+    const anonymizedPrompt = await anonymizeMessage(prompt, { lenientNames: true });
 
     // 3) Send to OpenAI
     const aiResponse = await openAI.completeText(anonymizedPrompt, { model, temperature, maxTokens });
