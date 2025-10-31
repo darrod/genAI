@@ -480,6 +480,53 @@ app.get('/stats', async (req, res) => {
   }
 });
 
+/**
+ * POST /secureChatGPT
+ * 1) Receives { prompt }
+ * 2) Anonymizes PII in prompt
+ * 3) Sends anonymized prompt to OpenAI
+ * 4) Deanonymizes OpenAI response
+ * 5) Returns final answer
+ */
+app.post('/secureChatGPT', async (req, res) => {
+  try {
+    if (!openAI) {
+      return res.status(501).json({
+        error: 'Not Implemented',
+        details: 'OpenAI is not configured on this server'
+      });
+    }
+
+    const { prompt, model, temperature, maxTokens } = req.body || {};
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({
+        error: 'Bad Request',
+        details: 'prompt (string) is required'
+      });
+    }
+
+    // 2) Anonymize incoming prompt
+    const anonymizedPrompt = await anonymizeMessage(prompt);
+
+    // 3) Send to OpenAI
+    const aiResponse = await openAI.completeText(anonymizedPrompt, { model, temperature, maxTokens });
+
+    // 4) Deanonymize the response
+    const finalAnswer = await deanonymizeMessage(aiResponse);
+
+    // 5) Return the final answer
+    return res.json({
+      answer: finalAnswer
+    });
+  } catch (error) {
+    console.error('Error in /secureChatGPT endpoint:', error);
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      details: 'Failed to process secureChatGPT request'
+    });
+  }
+});
+
 // POST /complete - text completion via OpenAI
 app.post('/complete', async (req, res) => {
   try {
