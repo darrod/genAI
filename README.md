@@ -1,6 +1,6 @@
-# Data Privacy Vault
+# Data Privacy Vault + Secure ChatGPT
 
-A Node.js service for anonymizing Personally Identifiable Information (PII) using tokenization. This service detects names, emails, and phone numbers in text and replaces them with consistent alphanumeric tokens.
+This project provides a Node.js service that anonymizes PII (names, emails, phones) in free text, optionally persists token mappings in MongoDB Atlas, and integrates with OpenAI to safely process prompts. A secure endpoint `/secureChatGPT` anonymizes the user prompt, sends it to OpenAI, then deanonymizes the AI response before returning it.
 
 ## Features
 
@@ -128,6 +128,28 @@ Optional JSON fields: `model`, `temperature`, `maxTokens`.
 }
 ```
 
+### POST /secureChatGPT
+
+Securely processes prompts that may contain PII.
+
+Flow: anonymize prompt → OpenAI completion → deanonymize response.
+
+Environment: set `OPENAI_API_KEY` in `.env`.
+
+**Request:**
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Resume el CV de Dago Borda con email dborda@gmail.com y teléfono 3152319157\"}"
+```
+
+**Response:**
+```json
+{
+  "answer": "..."
+}
+```
+
 ### GET /health
 
 Health check endpoint.
@@ -250,6 +272,8 @@ To add detection for new PII types:
 2. Add validation logic if needed
 3. Update the `anonymizeMessage` function
 4. Add tests for the new PII type
+
+
 
 ## License
 
