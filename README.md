@@ -140,23 +140,46 @@ Environment: set `OPENAI_API_KEY` in `.env`.
 
 For **reliable name detection**, especially for lowercase names, use one of these patterns:
 
+**Spanish:**
 - ✅ `"cuyo nombre es [Nombre Apellido]"`
 - ✅ `"llamado [Nombre Apellido]"` or `"llamada [Nombre Apellido]"`
 - ✅ `"de nombre [Nombre Apellido]"`
 - ✅ `"nombre: [Nombre Apellido]"`
 
+**English:**
+- ✅ `"whose name is [First Last]"`
+- ✅ `"called [First Last]"`
+- ✅ `"named [First Last]"`
+- ✅ `"name: [First Last]"`
+
 **Why?** Emails and phone numbers have clear patterns (`@`, digits), but names can be ambiguous. Using name indicators significantly improves detection reliability.
+
+**Note:** The service supports both Spanish and English prompts. Capitalized names (e.g., "John Smith", "María González") are automatically detected in both languages.
 
 **Examples:**
 
-✅ **Good** - Uses name indicator (works with any name):
+✅ **Good** - Uses name indicator (works with any name, including accented names):
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Haz un resumen de las habilidades de la persona cuyo nombre es carlos rodríguez. Su email es carlosr@mail.com y su número es 3129876543\"}"
+```
+
+✅ **Also Good** - Lowercase name without accents:
 ```bash
 curl -X POST http://localhost:3001/secureChatGPT \
   -H "Content-Type: application/json" \
   -d "{\"prompt\":\"Haz un resumen de las habilidades de la persona cuyo nombre es maria garcia. Su email es maria@email.com y su número es 3001234567\"}"
 ```
 
-✅ **Good** - Capitalized name (detected automatically, works with any capitalized name):
+✅ **English Example** - With name indicator:
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Create a summary of skills for the person whose name is john smith. Email: john@email.com, phone: 5551234567\"}"
+```
+
+✅ **Good** - Capitalized name (detected automatically in Spanish or English):
 ```bash
 curl -X POST http://localhost:3001/secureChatGPT \
   -H "Content-Type: application/json" \
@@ -225,15 +248,20 @@ The service detects the following types of PII:
 - Validates digit count (7-15 digits)
 
 ### 👤 Names
-- **Capitalized names**: Automatically detected (e.g., "Juan Pérez", "María González")
+- **Capitalized names**: Automatically detected in both Spanish and English
+  - Spanish examples: "Juan Pérez", "María González", "Carlos Rodríguez"
+  - English examples: "John Smith", "Jane Doe", "Robert Johnson"
 - **Lowercase names**: Best detected when preceded by name indicators:
-  - `"cuyo nombre es [nombre]"`
-  - `"llamado [nombre]"` / `"llamada [nombre]"`
-  - `"de nombre [nombre]"`
-  - `"nombre: [nombre]"`
-- Basic validation to reduce false positives
+  - **Spanish**: `"cuyo nombre es [nombre]"`, `"llamado [nombre]"`, `"de nombre [nombre]"`, `"nombre: [nombre]"`
+  - **English**: `"whose name is [name]"`, `"called [name]"`, `"named [name]"`, `"name: [name]"`
+- **Multi-language support**: The system supports both Spanish and English prompts
+- **Accented characters**: Fully supported (e.g., "Rodríguez", "María", "José")
+  - Accents and special characters are preserved correctly
+  - Names are normalized to lowercase for storage, but original formatting is preserved
+- Basic validation to reduce false positives (includes Spanish and English stopwords)
 - Pattern: `Firstname Lastname` (at least 3 characters each word)
 - **Recommendation**: Always use name indicators for lowercase names to ensure reliable detection
+- **Note**: The system handles Spanish characters (á, é, í, ó, ú, ñ) correctly in both detection and storage
 
 ## Tokenization
 

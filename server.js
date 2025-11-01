@@ -263,17 +263,24 @@ function isValidName(str) {
   // In production, you might want to check against common words dictionary
   // to avoid false positives like "Buenos", "De", etc.
   const commonWords = [
-    // Articles and determiners
+    // Spanish - Articles and determiners
     'De', 'Del', 'La', 'El', 'Los', 'Las', 'Un', 'Una', 'Unos', 'Unas',
-    // Possessive determiners
+    // Spanish - Possessive determiners
     'Su', 'Sus', 'Mi', 'Mis', 'Tu', 'Tus', 'Nuestro', 'Nuestra', 'Nuestros', 'Nuestras',
-    // Prepositions
+    // Spanish - Prepositions
     'Con', 'Para', 'Sobre', 'Desde', 'Hasta', 'Por', 'En', 'A', 'Al',
-    // Common capitalized words
+    // Spanish - Common capitalized words
     'Buenos', 'Este', 'Esta', 'Estos', 'Estas', 'Ese', 'Esa', 'Esos', 'Esas',
-    // Common verbs that start with capital (when at start of sentence)
+    // Spanish - Common verbs that start with capital (when at start of sentence)
     'Es', 'Son', 'Era', 'Fue', 'Ha', 'Han', 'Resume', 'Resumen', 'Haz', 'Hace',
-    'Crea', 'Crear', 'Genera', 'Generar', 'Escribe', 'Escribir', 'Analiza', 'Analizar'
+    'Crea', 'Crear', 'Genera', 'Generar', 'Escribe', 'Escribir', 'Analiza', 'Analizar',
+    // English - Articles and determiners
+    'The', 'A', 'An', 'Some', 'Any',
+    // English - Possessive determiners
+    'His', 'Her', 'Their', 'Our', 'Your', 'My', 'Its',
+    // English - Common verbs that start with capital (when at start of sentence)
+    'Is', 'Are', 'Was', 'Were', 'Has', 'Have', 'Write', 'Writes', 'Create', 'Creates',
+    'Generate', 'Generates', 'Analyze', 'Analyzes', 'Summary', 'Resume', 'Contact', 'Contacts'
   ];
   
   // Reject if it's a common word
@@ -338,16 +345,28 @@ async function anonymizeMessage(message, options = {}) {
     console.log(`📝 Current anonymized text: "${anonymized}"`);
     
     // Step 3.5: Detect names after specific name indicators (more reliable)
-    // Patterns like: "cuyo nombre es", "llamado", "de nombre", "nombre:", etc.
+    // Spanish patterns: "cuyo nombre es", "llamado", "de nombre", "nombre:"
+    // English patterns: "whose name is", "called", "named", "name:"
     const nameIndicators = [
+      // Spanish indicators - capitalized
       /\bcuyo\s+nombre\s+es\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
       /\bllamad[ao]\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
       /\bde\s+nombre\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
       /\bnombre[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
-      // Lowercase variants
+      // Spanish indicators - lowercase
       /\bcuyo\s+nombre\s+es\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi,
       /\bllamad[ao]\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi,
-      /\bde\s+nombre\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi
+      /\bde\s+nombre\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi,
+      // English indicators - capitalized
+      /\bwhose\s+name\s+is\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+      /\bcalled\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+      /\bnamed\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+      /\bname[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+      // English indicators - lowercase
+      /\bwhose\s+name\s+is\s+([a-z]{3,}\s+[a-z]{3,})/gi,
+      /\bcalled\s+([a-z]{3,}\s+[a-z]{3,})/gi,
+      /\bnamed\s+([a-z]{3,}\s+[a-z]{3,})/gi,
+      /\bname[:\s]+([a-z]{3,}\s+[a-z]{3,})/gi
     ];
     
     // Store original names with their exact text to preserve accents
@@ -404,29 +423,45 @@ async function anonymizeMessage(message, options = {}) {
       }
     }
     
-    // Comprehensive Spanish stopwords to avoid false positives
+    // Comprehensive stopwords (Spanish and English) to avoid false positives
     const stopwords = new Set([
-      // Articles and determiners
+      // Spanish - Articles and determiners
       'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas',
-      // Possessive determiners
+      // Spanish - Possessive determiners
       'su', 'sus', 'mi', 'mis', 'tu', 'tus', 'nuestro', 'nuestra', 'nuestros', 'nuestras',
       'vuestro', 'vuestra', 'vuestros', 'vuestras',
-      // Prepositions
+      // Spanish - Prepositions
       'y', 'para', 'con', 'sin', 'sobre', 'desde', 'hasta', 'por', 'en', 'a', 'al',
-      // Common words
+      // Spanish - Common words
       'oferta', 'trabajo', 'email', 'correo', 'telefono', 'teléfono', 'cv', 'resume', 'resumen',
       'numero', 'número', 'numeros', 'números', 'celular', 'cel', 'contacto', 'contactos',
       'habilidades', 'habilidad', 'es', 'son', 'esta', 'está', 'estan', 'están',
       'haz', 'hace', 'crea', 'crear', 'genera', 'generar', 'escribe', 'escribir',
       'analiza', 'analizar', 'coordina', 'coordinar', 'cuyo', 'cuya', 'cuyos', 'cuyas',
-      'nombre', 'nomnbre', 'nom', 'que', 'cual', 'cuales'
+      'nombre', 'nomnbre', 'nom', 'que', 'cual', 'cuales',
+      // English - Articles and determiners
+      'the', 'a', 'an', 'some', 'any',
+      // English - Possessive determiners
+      'his', 'her', 'their', 'our', 'your', 'my', 'its',
+      // English - Prepositions and conjunctions
+      'and', 'or', 'but', 'with', 'from', 'for', 'to', 'in', 'on', 'at', 'by',
+      // English - Common words
+      'email', 'phone', 'number', 'contact', 'skills', 'skill', 'ability', 'abilities',
+      'write', 'writes', 'create', 'creates', 'generate', 'generates', 'analyze', 'analyzes',
+      'resume', 'summary', 'summary', 'contact', 'contacts', 'whose', 'called', 'named'
     ]);
     
-    // Additional validation: common verbs/pronouns that shouldn't start a name
-    const invalidFirstWords = new Set(['es', 'son', 'era', 'fue', 'ha', 'han', 'ser', 'estar']);
+    // Additional validation: common verbs/pronouns that shouldn't start a name (Spanish and English)
+    const invalidFirstWords = new Set([
+      // Spanish
+      'es', 'son', 'era', 'fue', 'ha', 'han', 'ser', 'estar',
+      // English
+      'is', 'are', 'was', 'were', 'has', 'have', 'been', 'being'
+    ]);
     
     // Use anonymized text for matching (after emails and phones are already tokenized)
-    const lowerSeqRegex = /\b([a-záéíóúñ]{2,})\s+([a-záéíóúñ]{2,})\b/g;
+    // Support both Spanish and English characters
+    const lowerSeqRegex = /\b([a-záéíóúñ]{2,})\s+([a-záéíóúñ]{2,})\b/gi;
     const candidates = [];
     const seen = new Set();
     
@@ -700,18 +735,26 @@ app.get('/stats', async (req, res) => {
  * 
  * IMPORTANT - Name Detection Guidelines:
  * For best name detection, use one of these patterns in your prompt:
+ * 
+ * Spanish:
  * - "cuyo nombre es [Nombre Apellido]"
  * - "llamado [Nombre Apellido]"
  * - "de nombre [Nombre Apellido]"
  * - "nombre: [Nombre Apellido]"
  * 
- * Examples:
- * ✅ "Haz un resumen de las habilidades de la persona cuyo nombre es [nombre apellido]..."
- * ✅ "Analiza el CV de la persona llamada [Nombre Apellido]..."
- * ✅ "Resume el perfil de nombre: [Nombre Apellido]..."
+ * English:
+ * - "whose name is [First Last]"
+ * - "called [First Last]"
+ * - "named [First Last]"
+ * - "name: [First Last]"
  * 
- * Names in capital letters are detected automatically, but using name indicators
- * significantly improves detection reliability for lowercase names.
+ * Examples:
+ * ✅ Spanish: "Haz un resumen de las habilidades de la persona cuyo nombre es [nombre apellido]..."
+ * ✅ English: "Create a summary for the person whose name is [first last]..."
+ * ✅ Capitalized names are detected automatically in both languages: "John Smith", "María González"
+ * 
+ * Names in capital letters are detected automatically in both Spanish and English, but using
+ * name indicators significantly improves detection reliability for lowercase names.
  */
 app.post('/secureChatGPT', async (req, res) => {
   try {
