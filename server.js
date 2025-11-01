@@ -280,7 +280,11 @@ function isValidName(str) {
     'His', 'Her', 'Their', 'Our', 'Your', 'My', 'Its',
     // English - Common verbs that start with capital (when at start of sentence)
     'Is', 'Are', 'Was', 'Were', 'Has', 'Have', 'Write', 'Writes', 'Create', 'Creates',
-    'Generate', 'Generates', 'Analyze', 'Analyzes', 'Summary', 'Resume', 'Contact', 'Contacts'
+    'Generate', 'Generates', 'Analyze', 'Analyzes', 'Summary', 'Resume', 'Contact', 'Contacts',
+    // English - Common nouns that start with capital (when at start of sentence) but aren't names
+    'Job', 'Offer', 'For', 'With', 'Phone', 'Email', 'Number', 'Contact', 'Skills', 'Skill',
+    'Ability', 'Abilities', 'Name', 'Names', 'Person', 'People', 'Company', 'Companies',
+    'Work', 'Experience', 'Summary', 'Resume', 'Cv', 'Profile', 'Address', 'City', 'State'
   ];
   
   // Reject if it's a common word
@@ -361,12 +365,12 @@ async function anonymizeMessage(message, options = {}) {
       /\bwhose\s+name\s+is\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
       /\bcalled\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
       /\bnamed\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-      /\bname[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+      /\bname:\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
       // English indicators - lowercase
       /\bwhose\s+name\s+is\s+([a-z]{3,}\s+[a-z]{3,})/gi,
       /\bcalled\s+([a-z]{3,}\s+[a-z]{3,})/gi,
       /\bnamed\s+([a-z]{3,}\s+[a-z]{3,})/gi,
-      /\bname[:\s]+([a-z]{3,}\s+[a-z]{3,})/gi
+      /\bname:\s+([a-z]{3,}\s+[a-z]{3,})/gi
     ];
     
     // Store original names with their exact text to preserve accents
@@ -380,6 +384,15 @@ async function anonymizeMessage(message, options = {}) {
         const nameCandidate = m[1];  // This is the actual name with original case and accents
         // Validate it's not already a token and has minimum length
         if (!nameCandidate.includes('_') && nameCandidate.length > 5) {
+          // Additional validation: Check if the first word is a stopword/invalid word
+          const firstWord = nameCandidate.trim().split(/\s+/)[0].toLowerCase();
+          const invalidWords = ['is', 'are', 'was', 'were', 'has', 'have', 'the', 'a', 'an', 'for', 'with', 'name', 'names'];
+          
+          if (invalidWords.includes(firstWord)) {
+            console.log(`🚫 Filtered out invalid first word in candidate: "${nameCandidate}" (first word: "${firstWord}")`);
+            continue;
+          }
+          
           const normalizedKey = nameCandidate.toLowerCase();
           // Avoid duplicates (same name in different cases)
           if (!seenNames.has(normalizedKey)) {
@@ -448,7 +461,9 @@ async function anonymizeMessage(message, options = {}) {
       // English - Common words
       'email', 'phone', 'number', 'contact', 'skills', 'skill', 'ability', 'abilities',
       'write', 'writes', 'create', 'creates', 'generate', 'generates', 'analyze', 'analyzes',
-      'resume', 'summary', 'summary', 'contact', 'contacts', 'whose', 'called', 'named'
+      'resume', 'summary', 'contact', 'contacts', 'whose', 'called', 'named',
+      'job', 'offer', 'for', 'with', 'name', 'names', 'person', 'people', 'company', 'companies',
+      'work', 'experience', 'cv', 'profile', 'address', 'city', 'state'
     ]);
     
     // Additional validation: common verbs/pronouns that shouldn't start a name (Spanish and English)
@@ -456,7 +471,9 @@ async function anonymizeMessage(message, options = {}) {
       // Spanish
       'es', 'son', 'era', 'fue', 'ha', 'han', 'ser', 'estar',
       // English
-      'is', 'are', 'was', 'were', 'has', 'have', 'been', 'being'
+      'is', 'are', 'was', 'were', 'has', 'have', 'been', 'being',
+      // Additional English common words
+      'the', 'a', 'an', 'for', 'with', 'name', 'names', 'job', 'offer'
     ]);
     
     // Use anonymized text for matching (after emails and phones are already tokenized)
