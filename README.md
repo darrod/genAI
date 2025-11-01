@@ -179,6 +179,15 @@ curl -X POST http://localhost:3001/secureChatGPT \
   -d "{\"prompt\":\"Create a summary of skills for the person whose name is john smith. Email: john@email.com, phone: 5551234567\"}"
 ```
 
+✅ **English Example** - Job offer format:
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Job offer for the person whose name is Dario rodriguez with email rodher@gmail.com and phone 3123456789\"}"
+```
+
+⚠️ **Important**: The system automatically filters out common words like "Job", "Offer", "Name", etc. that aren't actual names. Always use name indicators (e.g., "whose name is") for reliable lowercase name detection.
+
 ✅ **Good** - Capitalized name (detected automatically in Spanish or English):
 ```bash
 curl -X POST http://localhost:3001/secureChatGPT \
@@ -258,7 +267,11 @@ The service detects the following types of PII:
 - **Accented characters**: Fully supported (e.g., "Rodríguez", "María", "José")
   - Accents and special characters are preserved correctly
   - Names are normalized to lowercase for storage, but original formatting is preserved
-- Basic validation to reduce false positives (includes Spanish and English stopwords)
+- **False positive prevention**: Advanced validation filters out common words that aren't names:
+  - Articles, prepositions, and determiners (e.g., "The", "A", "De", "El")
+  - Common verbs and pronouns (e.g., "Is", "Are", "Es", "Son")
+  - Context-specific words (e.g., "Job", "Offer", "Name", "Email", "Phone", "Contact")
+  - Words shorter than 3 characters
 - Pattern: `Firstname Lastname` (at least 3 characters each word)
 - **Recommendation**: Always use name indicators for lowercase names to ensure reliable detection
 - **Note**: The system handles Spanish characters (á, é, í, ó, ú, ñ) correctly in both detection and storage
@@ -309,8 +322,9 @@ On startup, the service loads all existing tokens into memory for fast access. N
 
 - **Token Storage**: Tokens are stored in MongoDB Atlas with indexes for fast retrieval
 - **Data Encryption**: Consider encrypting PII values before storing in MongoDB
-- **Advanced NLP**: Use more sophisticated name detection to reduce false positives
-- **Logging**: Ensure no PII is logged in application logs
+- **Advanced NLP**: The current implementation uses pattern matching and stopwords. For production, consider using more sophisticated NLP libraries or name dictionaries
+- **False Positive Prevention**: The system includes comprehensive stopword lists and validation to filter common words, but manual review of detected names is recommended for critical applications
+- **Logging**: Ensure no PII is logged in application logs (current implementation includes detailed logging for debugging)
 - **Rate Limiting**: Implement rate limiting to prevent abuse
 - **HTTPS**: Use HTTPS in production environments
 - **Input Validation**: Add more comprehensive input validation
