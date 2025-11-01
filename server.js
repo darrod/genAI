@@ -131,6 +131,7 @@ async function generateToken(value, type) {
       console.warn(`Warning: Value '${value}' already tokenized as ${existingType}, but requested as ${type}`);
     }
     
+    console.log(`📦 Using cached token for ${type}: ${normalizedValue} -> ${existingType}_${existingToken}`);
     return `${existingType}_${existingToken}`;
   }
 
@@ -148,6 +149,7 @@ async function generateToken(value, type) {
         tokenCache.set(normalizedValue, token);
         reverseTokenCache.set(token, { value: normalizedValue, type: docType });
         
+        console.log(`💾 Found existing token in MongoDB for ${type}: ${normalizedValue} -> ${docType}_${token}`);
         return `${docType}_${token}`;
       }
     } catch (error) {
@@ -160,6 +162,8 @@ async function generateToken(value, type) {
   const hash = crypto.createHash('sha256').update(normalizedValue).digest('hex');
   const token = hash.substring(0, 8); // Take first 8 characters
   const formattedToken = `${type}_${token}`;
+  
+  console.log(`🆕 Generating new token for ${type}: ${normalizedValue} -> ${formattedToken}`);
   
   // Store in memory caches
   tokenCache.set(normalizedValue, token);
@@ -175,16 +179,20 @@ async function generateToken(value, type) {
       });
       
       await newToken.save();
-      console.log(`💾 Saved new token to MongoDB: ${type}_${token}`);
+      console.log(`💾 ✅ Saved NEW token to MongoDB: ${type}_${token}`);
+      console.log(`   Value saved: "${normalizedValue}" (${normalizedValue.length} chars, ${Buffer.from(normalizedValue).length} bytes)`);
       
     } catch (error) {
       if (error.code === 11000) {
         // Duplicate key error - token already exists (race condition)
-        console.warn(`Token ${token} already exists in database`);
+        console.warn(`⚠️ Token ${token} already exists in database (race condition)`);
       } else {
-        console.error('Error saving token to MongoDB:', error.message);
+        console.error('❌ Error saving token to MongoDB:', error.message);
+        console.error('Error details:', error);
       }
     }
+  } else {
+    console.warn(`⚠️ MongoDB not connected. Token ${formattedToken} stored in memory only.`);
   }
   
   return formattedToken;
@@ -254,8 +262,31 @@ function isValidName(str) {
   // Basic validation: at least 2 characters, starts with capital
   // In production, you might want to check against common words dictionary
   // to avoid false positives like "Buenos", "De", etc.
-  const commonWords = ['Buenos', 'De', 'La', 'El', 'Con', 'Para', 'Sobre', 'Desde', 'Hasta'];
-  return str.length >= 2 && !commonWords.includes(str);
+  const commonWords = [
+    // Articles and determiners
+    'De', 'Del', 'La', 'El', 'Los', 'Las', 'Un', 'Una', 'Unos', 'Unas',
+    // Possessive determiners
+    'Su', 'Sus', 'Mi', 'Mis', 'Tu', 'Tus', 'Nuestro', 'Nuestra', 'Nuestros', 'Nuestras',
+    // Prepositions
+    'Con', 'Para', 'Sobre', 'Desde', 'Hasta', 'Por', 'En', 'A', 'Al',
+    // Common capitalized words
+    'Buenos', 'Este', 'Esta', 'Estos', 'Estas', 'Ese', 'Esa', 'Esos', 'Esas',
+    // Common verbs that start with capital (when at start of sentence)
+    'Es', 'Son', 'Era', 'Fue', 'Ha', 'Han', 'Resume', 'Resumen', 'Haz', 'Hace',
+    'Crea', 'Crear', 'Genera', 'Generar', 'Escribe', 'Escribir', 'Analiza', 'Analizar'
+  ];
+  
+  // Reject if it's a common word
+  if (commonWords.includes(str)) {
+    return false;
+  }
+  
+  // Reject if too short (less than 3 characters) - prevents "Su", "Mi", "Tu", etc.
+  if (str.length < 3) {
+    return false;
+  }
+  
+  return true;
 }
 
 /**
@@ -269,6 +300,7 @@ async function anonymizeMessage(message, options = {}) {
 
   // Step 1: Anonymize emails
   const emailMatches = message.match(PII_PATTERNS.email) || [];
+  console.log(`📧 Found ${emailMatches.length} email(s) to anonymize:`, emailMatches);
   for (const match of emailMatches) {
     const token = await generateToken(match, 'EMAIL');
     anonymized = anonymized.replace(match, token);
@@ -276,38 +308,196 @@ async function anonymizeMessage(message, options = {}) {
 
   // Step 2: Anonymize phone numbers
   const phoneMatches = message.match(PII_PATTERNS.phone) || [];
+  console.log(`📱 Found ${phoneMatches.length} phone number(s) to validate:`, phoneMatches);
   for (const match of phoneMatches) {
     if (isValidPhone(match)) {
+      console.log(`✅ Valid phone number: ${match}`);
       const token = await generateToken(match, 'PHONE');
       anonymized = anonymized.replace(match, token);
+    } else {
+      console.log(`❌ Invalid phone number (filtered): ${match}`);
     }
   }
 
   // Step 3: Anonymize names (be careful with false positives)
   const nameMatches = message.match(PII_PATTERNS.name) || [];
+  console.log(`👤 Found ${nameMatches.length} capitalized name(s) to validate:`, nameMatches);
   for (const match of nameMatches) {
     if (isValidName(match)) {
+      console.log(`✅ Valid capitalized name: ${match}`);
       const token = await generateToken(match, 'NAME');
       anonymized = anonymized.replace(match, token);
+    } else {
+      console.log(`❌ Invalid capitalized name (filtered): ${match}`);
     }
   }
 
   // Optional lenient mode for names: capture lowercase two-word sequences likely to be names
   if (lenientNames) {
-    // Basic Spanish stopwords to avoid obvious non-names
-    const stopwords = new Set(['de','del','la','el','los','las','y','para','con','sin','sobre','desde','hasta','por','en','oferta','trabajo','email','correo','telefono','teléfono','cv','resume','resumen']);
+    console.log(`\n🔍 Starting lenient name detection mode...`);
+    console.log(`📝 Current anonymized text: "${anonymized}"`);
+    
+    // Step 3.5: Detect names after specific name indicators (more reliable)
+    // Patterns like: "cuyo nombre es", "llamado", "de nombre", "nombre:", etc.
+    const nameIndicators = [
+      /\bcuyo\s+nombre\s+es\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
+      /\bllamad[ao]\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
+      /\bde\s+nombre\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
+      /\bnombre[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/gi,
+      // Lowercase variants
+      /\bcuyo\s+nombre\s+es\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi,
+      /\bllamad[ao]\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi,
+      /\bde\s+nombre\s+([a-záéíóúñ]{3,}\s+[a-záéíóúñ]{3,})/gi
+    ];
+    
+    // Store original names with their exact text to preserve accents
+    const indicatorMatches = [];
+    const seenNames = new Set();
+    
+    for (const pattern of nameIndicators) {
+      let m;
+      pattern.lastIndex = 0;
+      while ((m = pattern.exec(anonymized)) !== null) {
+        const nameCandidate = m[1];  // This is the actual name with original case and accents
+        // Validate it's not already a token and has minimum length
+        if (!nameCandidate.includes('_') && nameCandidate.length > 5) {
+          const normalizedKey = nameCandidate.toLowerCase();
+          // Avoid duplicates (same name in different cases)
+          if (!seenNames.has(normalizedKey)) {
+            seenNames.add(normalizedKey);
+            indicatorMatches.push({
+              originalName: nameCandidate,  // Keep original with accents and case intact
+              index: m.index
+            });
+            console.log(`🎯 Found name after indicator: "${nameCandidate}" (length: ${nameCandidate.length}) at position ${m.index}`);
+          }
+        }
+      }
+    }
+    
+    // Process indicator-based names first (they're more reliable)
+    // Sort by position (end to start) to avoid interference when replacing
+    indicatorMatches.sort((a, b) => b.index - a.index);
+    
+    for (const match of indicatorMatches) {
+      const originalName = match.originalName;
+      
+      // Check if name still exists in text (not already replaced with a token)
+      const nameRegex = new RegExp(originalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      if (nameRegex.test(anonymized)) {
+        console.log(`✅ Processing indicator-based name: "${originalName}" (preserving accents and case)`);
+        console.log(`   Name length: ${originalName.length} characters`);
+        console.log(`   Name bytes: ${Buffer.from(originalName).length} bytes`);
+        console.log(`   Name normalized (lowercase): "${originalName.toLowerCase()}"`);
+        console.log(`   Normalized length: ${originalName.toLowerCase().length} characters`);
+        
+        // Normalize to lowercase only when saving to DB, but keep original for replacement
+        const normalizedForDB = originalName.toLowerCase();
+        console.log(`   Saving to DB: "${normalizedForDB}" (${normalizedForDB.length} chars)`);
+        
+        const token = await generateToken(normalizedForDB, 'NAME');
+        const escapedName = originalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        anonymized = anonymized.replace(new RegExp(escapedName, 'gi'), token);
+        console.log(`   Replaced "${originalName}" (${originalName.length} chars) with ${token}`);
+      } else {
+        console.log(`⏭️ Skipping "${originalName}" - already processed or not found`);
+      }
+    }
+    
+    // Comprehensive Spanish stopwords to avoid false positives
+    const stopwords = new Set([
+      // Articles and determiners
+      'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas',
+      // Possessive determiners
+      'su', 'sus', 'mi', 'mis', 'tu', 'tus', 'nuestro', 'nuestra', 'nuestros', 'nuestras',
+      'vuestro', 'vuestra', 'vuestros', 'vuestras',
+      // Prepositions
+      'y', 'para', 'con', 'sin', 'sobre', 'desde', 'hasta', 'por', 'en', 'a', 'al',
+      // Common words
+      'oferta', 'trabajo', 'email', 'correo', 'telefono', 'teléfono', 'cv', 'resume', 'resumen',
+      'numero', 'número', 'numeros', 'números', 'celular', 'cel', 'contacto', 'contactos',
+      'habilidades', 'habilidad', 'es', 'son', 'esta', 'está', 'estan', 'están',
+      'haz', 'hace', 'crea', 'crear', 'genera', 'generar', 'escribe', 'escribir',
+      'analiza', 'analizar', 'coordina', 'coordinar', 'cuyo', 'cuya', 'cuyos', 'cuyas',
+      'nombre', 'nomnbre', 'nom', 'que', 'cual', 'cuales'
+    ]);
+    
+    // Additional validation: common verbs/pronouns that shouldn't start a name
+    const invalidFirstWords = new Set(['es', 'son', 'era', 'fue', 'ha', 'han', 'ser', 'estar']);
+    
+    // Use anonymized text for matching (after emails and phones are already tokenized)
     const lowerSeqRegex = /\b([a-záéíóúñ]{2,})\s+([a-záéíóúñ]{2,})\b/g;
+    const candidates = [];
     const seen = new Set();
+    
+    // First, collect all matches from the anonymized text
     let m;
-    while ((m = lowerSeqRegex.exec(message)) !== null) {
-      const candidate = `${m[1]} ${m[2]}`;
-      const w1 = m[1];
-      const w2 = m[2];
-      if (stopwords.has(w1) || stopwords.has(w2)) continue;
-      if (seen.has(candidate)) continue;
+    const matches = [];
+    // Collect all matches first
+    lowerSeqRegex.lastIndex = 0;
+    console.log(`🔎 Searching for name patterns in text: "${anonymized}"`);
+    while ((m = lowerSeqRegex.exec(anonymized)) !== null) {
+      matches.push({
+        candidate: `${m[1]} ${m[2]}`,
+        w1: m[1],
+        w2: m[2],
+        index: m.index
+      });
+    }
+    console.log(`📋 Found ${matches.length} potential name sequences before filtering:`, matches.map(m => `"${m.candidate}"`));
+    
+    // Process matches and validate
+    for (const match of matches) {
+      const { candidate, w1, w2 } = match;
+      
+      // STRICT Primary filter: Skip if any word is a stopword (check both lowercase and as-is)
+      const w1Lower = w1.toLowerCase();
+      const w2Lower = w2.toLowerCase();
+      if (stopwords.has(w1Lower) || stopwords.has(w2Lower) || stopwords.has(w1) || stopwords.has(w2)) {
+        console.log(`🚫 Filtered out (stopword): "${candidate}" (w1: "${w1}", w2: "${w2}")`);
+        continue;
+      }
+      
+      // STRICT Secondary filter: Skip if first word is a common verb/pronoun (not likely to start a name)
+      if (invalidFirstWords.has(w1Lower) || invalidFirstWords.has(w1)) {
+        console.log(`🚫 Filtered out (invalid first word): "${candidate}"`);
+        continue;
+      }
+      
+      // STRICT Tertiary filter: Skip if either word is too short (less than 3 characters)
+      // This is critical - names in Spanish are typically at least 3 characters
+      // Prevents false positives like "su", "mi", "tu", "la", "el", etc.
+      if (w1.length < 3 || w2.length < 3) {
+        console.log(`🚫 Filtered out (too short): "${candidate}" (w1 length: ${w1.length}, w2 length: ${w2.length})`);
+        continue;
+      }
+      
+      // Skip if we've already processed this candidate
+      if (seen.has(candidate)) {
+        console.log(`⏭️ Skipping duplicate candidate: "${candidate}"`);
+        continue;
+      }
+      
+      console.log(`✅ Candidate PASSED all filters: "${candidate}"`);
       seen.add(candidate);
-      const token = await generateToken(candidate, 'NAME');
-      anonymized = anonymized.replace(new RegExp(candidate, 'g'), token);
+      candidates.push(candidate);
+    }
+    
+    // Then, process each candidate and replace
+    console.log(`🔍 Found ${candidates.length} name candidates in lenient mode:`, candidates);
+    
+    for (const candidate of candidates) {
+      // Only replace if candidate still exists in anonymized text (not already replaced)
+      if (anonymized.includes(candidate)) {
+        console.log(`✅ Processing name candidate: "${candidate}"`);
+        const token = await generateToken(candidate, 'NAME');
+        // Escape special regex characters in candidate for safe replacement
+        const escapedCandidate = candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        anonymized = anonymized.replace(new RegExp(escapedCandidate, 'g'), token);
+        console.log(`   Replaced all occurrences of "${candidate}" with ${token}`);
+      } else {
+        console.log(`⏭️ Skipping candidate "${candidate}" - already replaced in text`);
+      }
     }
   }
 
@@ -507,6 +697,21 @@ app.get('/stats', async (req, res) => {
  * 3) Sends anonymized prompt to OpenAI
  * 4) Deanonymizes OpenAI response
  * 5) Returns final answer
+ * 
+ * IMPORTANT - Name Detection Guidelines:
+ * For best name detection, use one of these patterns in your prompt:
+ * - "cuyo nombre es [Nombre Apellido]"
+ * - "llamado [Nombre Apellido]"
+ * - "de nombre [Nombre Apellido]"
+ * - "nombre: [Nombre Apellido]"
+ * 
+ * Examples:
+ * ✅ "Haz un resumen de las habilidades de la persona cuyo nombre es [nombre apellido]..."
+ * ✅ "Analiza el CV de la persona llamada [Nombre Apellido]..."
+ * ✅ "Resume el perfil de nombre: [Nombre Apellido]..."
+ * 
+ * Names in capital letters are detected automatically, but using name indicators
+ * significantly improves detection reliability for lowercase names.
  */
 app.post('/secureChatGPT', async (req, res) => {
   try {
@@ -526,6 +731,8 @@ app.post('/secureChatGPT', async (req, res) => {
     }
 
     // 2) Anonymize incoming prompt (lenient names enabled for lowercase cases)
+    // The lenient mode includes detection of names after specific indicators
+    // like "cuyo nombre es", "llamado", "de nombre", etc.
     const anonymizedPrompt = await anonymizeMessage(prompt, { lenientNames: true });
 
     // 3) Send to OpenAI

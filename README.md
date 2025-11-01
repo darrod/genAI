@@ -136,12 +136,48 @@ Flow: anonymize prompt → OpenAI completion → deanonymize response.
 
 Environment: set `OPENAI_API_KEY` in `.env`.
 
+**📝 Important: Name Detection Best Practices**
+
+For **reliable name detection**, especially for lowercase names, use one of these patterns:
+
+- ✅ `"cuyo nombre es [Nombre Apellido]"`
+- ✅ `"llamado [Nombre Apellido]"` or `"llamada [Nombre Apellido]"`
+- ✅ `"de nombre [Nombre Apellido]"`
+- ✅ `"nombre: [Nombre Apellido]"`
+
+**Why?** Emails and phone numbers have clear patterns (`@`, digits), but names can be ambiguous. Using name indicators significantly improves detection reliability.
+
+**Examples:**
+
+✅ **Good** - Uses name indicator (works with any name):
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Haz un resumen de las habilidades de la persona cuyo nombre es maria garcia. Su email es maria@email.com y su número es 3001234567\"}"
+```
+
+✅ **Good** - Capitalized name (detected automatically, works with any capitalized name):
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Resume el CV de Juan Pérez con email juan@email.com y teléfono 3152319157\"}"
+```
+
+✅ **Also Good** - Uses "llamado" indicator (works with any name):
+```bash
+curl -X POST http://localhost:3001/secureChatGPT \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Analiza el perfil de la persona llamada Ana López. Contacto: ana@email.com, tel: 3001234567\"}"
+```
+
 **Request:**
 ```bash
 curl -X POST http://localhost:3001/secureChatGPT \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"Resume el CV de Dago Borda con email dborda@gmail.com y teléfono 3152319157\"}"
+  -d "{\"prompt\":\"Your prompt here\"}"
 ```
+
+Optional JSON fields: `model`, `temperature`, `maxTokens`.
 
 **Response:**
 ```json
@@ -189,9 +225,15 @@ The service detects the following types of PII:
 - Validates digit count (7-15 digits)
 
 ### 👤 Names
-- Detects capitalized words (potential names)
+- **Capitalized names**: Automatically detected (e.g., "Juan Pérez", "María González")
+- **Lowercase names**: Best detected when preceded by name indicators:
+  - `"cuyo nombre es [nombre]"`
+  - `"llamado [nombre]"` / `"llamada [nombre]"`
+  - `"de nombre [nombre]"`
+  - `"nombre: [nombre]"`
 - Basic validation to reduce false positives
-- Pattern: `Firstname Lastname`
+- Pattern: `Firstname Lastname` (at least 3 characters each word)
+- **Recommendation**: Always use name indicators for lowercase names to ensure reliable detection
 
 ## Tokenization
 

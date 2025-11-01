@@ -39,7 +39,10 @@ class OpenAIClient {
     const response = await this.client.chat.completions.create({
       model: chosenModel,
       messages: [
-        { role: 'system', content: 'You are a helpful assistant.' },
+        { 
+          role: 'system', 
+          content: 'You are a helpful assistant. When you see tokens in the format NAME_xxx, EMAIL_xxx, or PHONE_xxx, these are anonymized placeholders for personal information that will be restored later. Treat them as normal data and respond to requests naturally. Do not refuse to process requests because they contain these tokens - they are intentionally anonymized placeholders, not actual personal data.' 
+        },
         { role: 'user', content: prompt }
       ],
       temperature,
